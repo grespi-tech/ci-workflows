@@ -1,0 +1,118 @@
+name: playwright
+
+# Playwright E2E inside Microsoft's image, which ships the browsers and their
+# system packages (installing them with apt took 35 min on a hosted runner).
+#
+#   jobs:
+#     e2e:
+#       uses: grespi-tech/ci-workflows/.github/workflows/playwright.yml@v1
+#       secrets: inherit
+#       with:
+#         image: mcr.microsoft.com/playwright:v1.57.0-noble   # tag MUST match @playwright/test
+
+on:
+  workflow_call:
+    inputs:
+      name:
+        type: string
+        default: E2E
+      image:
+        description: Playwright image; its tag must match @playwright/test in package.json.
+        type: string
+        required: true
+      shards:
+        description: >
+          JSON list of shard numbers, e.g. '[1, 2]'. Each shard repeats install
+          + build, so on a single box more shards mostly cost time; add shards
+          only alongside more runners.
+        type: string
+        default: '[1]'
+      build:
+        description: Commands run before the tests, one per line.
+        type: string
+        default: pnpm build
+      test:
+        description: Test command; `--shard=i/n` is appended.
+        type: string
+        default: pnpm exec playwright test
+      env:
+        type: string
+        default: ''
+      secret-names:
+        type: string
+        default: ''
+      node-version:
+        type: string
+        default: '22'
+      pnpm-version:
+        type: string
+        default: ''
+      report-path:
+        type: string
+        default: playwright-report/
+      runs-on:
+        type: string
+        default: '["self-hosted", "ci"]'
+      timeout-minutes:
+        type: number
+        default: 45
+
+jobs:
+  e2e:
+    name: ${{ inputs.name }} (${{ matrix.shard }}/${{ strategy.job-total }})
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    # --user 1001 is the runner user's uid on the pool (and on GitHub-hosted
+    # runners), so the bind-mounted workspace stays writable. Firefox refuses to
+    # start as root with a $HOME it does not own.
+    # --cpus/--memory: job containers run under dockerd, outside the runners'
+    # systemd slice, so the cap has to be set here. --ipc=host is Playwright's
+    # recommendation for Chromium.
+    container:
+      image: ${{ inputs.image }}
+      options: --user 1001 --cpus 2 --memory 3g --ipc=host --init
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(inputs.shards) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ inputs.pnpm-version }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Export env
+        if: inputs.env != '' || inputs.secret-names != ''
+        uses: grespi-tech/ci-workflows/.github/actions/export-env@v1
+        with:
+          env: ${{ inputs.env }}
+          secret-names: ${{ inputs.secret-names }}
+          secrets-json: ${{ toJSON(secrets) }}
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: ${{ inputs.build }}
+
+      - name: Test
+        env:
+          SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+          TEST: ${{ inputs.test }}
+        run: $TEST --shard="$SHARD"
+
+      # Artifact storage is billed separately from minutes; a storage problem
+      # should not turn a green test run red.
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        with:
+          name: playwright-report-${{ matrix.shard }}
+          path: ${{ inputs.report-path }}
+          retention-days: 14
