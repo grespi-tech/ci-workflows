@@ -9,6 +9,11 @@ Jobs run on the org's self-hosted pool on the Hetzner box `universitydb`
 (3 CPUs at low CPUWeight, 3 GB) so the box's production services keep priority. Containers a job
 starts run outside that slice, so the workflows cap them with `--cpus`/`--memory`.
 
+The box's vCPUs are shared 2.0 GHz Skylake: single-threaded code runs about 2x
+slower than on GitHub-hosted runners. Tests with wall-clock budgets should
+multiply them by `PERF_BUDGET_SCALE` and set it to `2` in the caller's `env`
+(open-outbound-site does this).
+
 Callers pin an exact release tag (`@v1.0.1`). Tags are never moved: a fix is a
 new tag, and callers bump to it. `v1` (2026-10-26) is superseded by `v1.0.1`,
 whose pnpm install is per-job so concurrent jobs on the pool can't delete each
