@@ -6,7 +6,7 @@ these, so CI behaves the same everywhere and changes land in one place.
 Jobs run on the org's self-hosted pool on the Hetzner box `universitydb`
 (`udb-hetzner`): runners `udb-ci-1`, `udb-ci-2`, label `ci`, user `gha`
 (uid 1001), installed under `/opt/gha-ci`. Both run in `gha-ci.slice`
-(2 CPUs, 3 GB) so the box's production services keep priority. Containers a job
+(3 CPUs at low CPUWeight, 3 GB) so the box's production services keep priority. Containers a job
 starts run outside that slice, so the workflows cap them with `--cpus`/`--memory`.
 
 Callers pin an exact release tag (`@v1.0.1`). Tags are never moved: a fix is a
