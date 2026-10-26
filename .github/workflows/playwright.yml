@@ -5,7 +5,7 @@ name: playwright
 #
 #   jobs:
 #     e2e:
-#       uses: grespi-tech/ci-workflows/.github/workflows/playwright.yml@v1
+#       uses: grespi-tech/ci-workflows/.github/workflows/playwright.yml@v1.0.1
 #       secrets: inherit
 #       with:
 #         image: mcr.microsoft.com/playwright:v1.57.0-noble   # tag MUST match @playwright/test
@@ -84,6 +84,8 @@ jobs:
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
           version: ${{ inputs.pnpm-version }}
+          # Per-job; see node.yml.
+          dest: ${{ runner.temp }}/setup-pnpm
 
       - uses: actions/setup-node@v4
         with:
@@ -91,7 +93,7 @@ jobs:
 
       - name: Export env
         if: inputs.env != '' || inputs.secret-names != ''
-        uses: grespi-tech/ci-workflows/.github/actions/export-env@v1
+        uses: grespi-tech/ci-workflows/.github/actions/export-env@v1.0.1
         with:
           env: ${{ inputs.env }}
           secret-names: ${{ inputs.secret-names }}

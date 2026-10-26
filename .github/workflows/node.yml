@@ -5,7 +5,7 @@ name: node
 #
 #   jobs:
 #     checks:
-#       uses: grespi-tech/ci-workflows/.github/workflows/node.yml@v1
+#       uses: grespi-tech/ci-workflows/.github/workflows/node.yml@v1.0.1
 #       secrets: inherit            # only if secret-names is used
 #       with:
 #         run: |
@@ -80,6 +80,10 @@ jobs:
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
           version: ${{ inputs.pnpm-version }}
+          # Per-job, not the default ~/setup-pnpm: every runner on the pool is
+          # the same user, so a concurrent job installing another pnpm version
+          # into the shared $HOME deleted this job's binary mid-run (exit 127).
+          dest: ${{ runner.temp }}/setup-pnpm
 
       # No `cache: pnpm`. On the self-hosted pool the pnpm store lives on the
       # runner's disk and is shared by every job, which beats round-tripping it
@@ -122,7 +126,7 @@ jobs:
 
       - name: Export env
         if: inputs.env != '' || inputs.secret-names != ''
-        uses: grespi-tech/ci-workflows/.github/actions/export-env@v1
+        uses: grespi-tech/ci-workflows/.github/actions/export-env@v1.0.1
         with:
           env: ${{ inputs.env }}
           secret-names: ${{ inputs.secret-names }}

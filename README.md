@@ -9,15 +9,17 @@ Jobs run on the org's self-hosted pool on the Hetzner box `universitydb`
 (2 CPUs, 3 GB) so the box's production services keep priority. Containers a job
 starts run outside that slice, so the workflows cap them with `--cpus`/`--memory`.
 
-Callers pin a tag (`@v1`). Move the tag only for backwards-compatible changes;
-breaking changes get `v2`.
+Callers pin an exact release tag (`@v1.0.1`). Tags are never moved: a fix is a
+new tag, and callers bump to it. `v1` (2026-10-26) is superseded by `v1.0.1`,
+whose pnpm install is per-job so concurrent jobs on the pool can't delete each
+other's pnpm binary.
 
 ## node.yml: one pnpm job
 
 ```yaml
 jobs:
   checks:
-    uses: grespi-tech/ci-workflows/.github/workflows/node.yml@v1
+    uses: grespi-tech/ci-workflows/.github/workflows/node.yml@v1.0.1
     secrets: inherit                # only needed with secret-names
     with:
       name: Check & test
@@ -41,7 +43,7 @@ Inputs: `run` (required), `name`, `cleanup` (runs even on failure), `env`
 ```yaml
 jobs:
   e2e:
-    uses: grespi-tech/ci-workflows/.github/workflows/playwright.yml@v1
+    uses: grespi-tech/ci-workflows/.github/workflows/playwright.yml@v1.0.1
     secrets: inherit
     with:
       image: mcr.microsoft.com/playwright:v1.57.0-noble   # must match @playwright/test
