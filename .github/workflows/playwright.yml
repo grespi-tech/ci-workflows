@@ -1,0 +1,148 @@
+name: playwright
+
+# Playwright E2E inside Microsoft's image, which ships the browsers and their
+# system packages (installing them with apt took 35 min on a hosted runner).
+#
+#   jobs:
+#     e2e:
+#       uses: grespi-tech/ci-workflows/.github/workflows/playwright.yml@v1.3.0
+#       secrets: inherit
+#       with:
+#         image: mcr.microsoft.com/playwright:v1.57.0-noble   # tag MUST match @playwright/test
+
+on:
+  workflow_call:
+    inputs:
+      name:
+        type: string
+        default: E2E
+      image:
+        description: Playwright image; its tag must match @playwright/test in package.json.
+        type: string
+        required: true
+      shards:
+        description: >
+          JSON list of shard numbers, e.g. '[1, 2]'. Each shard repeats install
+          + build, so on a single box more shards mostly cost time; add shards
+          only alongside more runners.
+        type: string
+        default: '[1]'
+      build:
+        description: Commands run before the tests, one per line.
+        type: string
+        default: pnpm build
+      test:
+        description: Test command; `--shard=i/n` is appended.
+        type: string
+        default: pnpm exec playwright test
+      env:
+        type: string
+        default: ''
+      secret-names:
+        type: string
+        default: ''
+      node-version:
+        type: string
+        default: '22'
+      pnpm-version:
+        type: string
+        default: ''
+      report-path:
+        type: string
+        default: playwright-report/
+      runs-on:
+        type: string
+        default: '["self-hosted", "ci"]'
+      timeout-minutes:
+        type: number
+        default: 45
+      container-cpus:
+        description: CPU cap for the test container (docker --cpus).
+        type: string
+        default: '2'
+      container-memory:
+        description: >
+          Memory cap for the test container (docker --memory). Size it to the
+          worker count: each Playwright worker runs its own browser.
+        type: string
+        default: 3g
+      container-options:
+        description: >
+          Extra docker options for the test container, e.g. a -v mount so a
+          host path the workspace links to (a shared pnpm store) resolves
+          inside the container too.
+        type: string
+        default: ''
+    secrets:
+      ENV_SECRETS:
+        description: KEY=VALUE lines built from the caller's secrets; see node.yml.
+        required: false
+
+jobs:
+  e2e:
+    name: ${{ inputs.name }} (${{ matrix.shard }}/${{ strategy.job-total }})
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+    # --user 1001 is the runner user's uid on the pool (and on GitHub-hosted
+    # runners), so the bind-mounted workspace stays writable. Firefox refuses to
+    # start as root with a $HOME it does not own.
+    # --cpus/--memory: job containers run under dockerd, outside the runners'
+    # systemd slice, so the cap has to be set here. --cpu-shares 256 (default
+    # 1024) gives the host's other services priority when CPUs are contended.
+    # --ipc=host is Playwright's recommendation for Chromium.
+    container:
+      image: ${{ inputs.image }}
+      options: >-
+        --user 1001 --cpus ${{ inputs.container-cpus }} --memory ${{ inputs.container-memory }}
+        --cpu-shares 256 --ipc=host --init ${{ inputs.container-options }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(inputs.shards) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned by SHA, as in node.yml.
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+        with:
+          version: ${{ inputs.pnpm-version }}
+          # Per-job; see node.yml.
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      # Always runs; see node.yml.
+      - name: Export env
+        uses: grespi-tech/ci-workflows/.github/actions/export-env@v1.3.0
+        with:
+          env: ${{ inputs.env }}
+          secret-names: ${{ inputs.secret-names }}
+          secrets-json: ${{ toJSON(secrets) }}
+          secret-lines: ${{ secrets.ENV_SECRETS }}
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: ${{ inputs.build }}
+
+      - name: Test
+        env:
+          SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+          TEST: ${{ inputs.test }}
+        run: $TEST --shard="$SHARD"
+
+      # Artifact storage is billed separately from minutes; a storage problem
+      # should not turn a green test run red.
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        with:
+          name: playwright-report-${{ matrix.shard }}
+          path: ${{ inputs.report-path }}
+          retention-days: 14

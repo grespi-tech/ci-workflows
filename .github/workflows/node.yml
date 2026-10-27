@@ -1,0 +1,157 @@
+name: node
+
+# One pnpm job on the self-hosted pool: checkout, pnpm + Node, optional
+# throwaway Postgres, install, then the caller's commands.
+#
+#   jobs:
+#     checks:
+#       uses: grespi-tech/ci-workflows/.github/workflows/node.yml@v1.3.0
+#       secrets: inherit            # only if secret-names is used
+#       with:
+#         run: |
+#           pnpm check
+#           pnpm test
+
+on:
+  workflow_call:
+    inputs:
+      name:
+        description: Job name shown in the checks list.
+        type: string
+        default: checks
+      run:
+        description: Commands run after install, one per line; the first failure fails the job.
+        type: string
+        required: true
+      cleanup:
+        description: Commands run at the end even when `run` failed (e.g. compose down).
+        type: string
+        default: ''
+      env:
+        description: KEY=VALUE lines; ${VAR} expands at runtime (${PGPORT} etc.).
+        type: string
+        default: ''
+      secret-names:
+        description: 'Whitespace-separated secret names to export as env vars. Needs `secrets: inherit`.'
+        type: string
+        default: ''
+      node-version:
+        type: string
+        default: '22'
+      pnpm-version:
+        description: Empty = the packageManager field in package.json.
+        type: string
+        default: ''
+      install:
+        description: Run `pnpm install --frozen-lockfile` before `run`.
+        type: boolean
+        default: true
+      postgres:
+        description: >
+          Postgres image (e.g. postgres:17). Starts a throwaway server on a free
+          127.0.0.1 port and exports PGHOST/PGPORT/PGUSER/PGPASSWORD/PGCONTAINER.
+          Data lives in tmpfs and is gone when the job ends.
+        type: string
+        default: ''
+      postgres-databases:
+        description: Space-separated databases to create on that server.
+        type: string
+        default: ''
+      runs-on:
+        description: JSON runner labels.
+        type: string
+        default: '["self-hosted", "ci"]'
+      timeout-minutes:
+        type: number
+        default: 30
+    secrets:
+      ENV_SECRETS:
+        description: >
+          KEY=VALUE lines built from the caller's secrets. Use this instead of
+          `secrets: inherit` + secret-names when the caller lives under another
+          owner: inherit passes nothing across owners.
+        required: false
+
+jobs:
+  run:
+    name: ${{ inputs.name }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      # Third-party action pinned by SHA: the pool's runners are in the docker
+      # group, so a moved tag would run with root-equivalent access.
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+        with:
+          version: ${{ inputs.pnpm-version }}
+          # Per-job, not the default ~/setup-pnpm: every runner on the pool is
+          # the same user, so a concurrent job installing another pnpm version
+          # into the shared $HOME deleted this job's binary mid-run (exit 127).
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      # No `cache: pnpm`. On the self-hosted pool the pnpm store lives on the
+      # runner's disk and is shared by every job, which beats round-tripping it
+      # through the Actions cache.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Start Postgres
+        if: inputs.postgres != ''
+        env:
+          IMAGE: ${{ inputs.postgres }}
+          DATABASES: ${{ inputs.postgres-databases }}
+        run: |
+          name="ci-pg-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RUNNER_NAME}"
+          # Port 0 = a free port picked by Docker, so concurrent jobs on one
+          # box never collide. Capped, at low CPU priority, because Docker
+          # containers run outside the runners' systemd slice.
+          docker run -d --rm --name "$name" --cpus 1 --memory 1g --cpu-shares 256 \
+            -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
+            --tmpfs /var/lib/postgresql/data \
+            -p 127.0.0.1:0:5432 "$IMAGE" >/dev/null
+          port=$(docker port "$name" 5432/tcp | head -n1 | cut -d: -f2)
+          for _ in $(seq 1 60); do
+            docker exec "$name" pg_isready -U postgres -h 127.0.0.1 >/dev/null 2>&1 && break
+            sleep 1
+          done
+          docker exec "$name" pg_isready -U postgres -h 127.0.0.1
+          for db in $DATABASES; do
+            docker exec "$name" psql -U postgres -v ON_ERROR_STOP=1 -qc "CREATE DATABASE \"$db\""
+          done
+          {
+            echo "PGCONTAINER=$name"
+            echo "PGHOST=127.0.0.1"
+            echo "PGPORT=$port"
+            echo "PGUSER=postgres"
+            echo "PGPASSWORD=postgres"
+          } >> "$GITHUB_ENV"
+          echo "Postgres $IMAGE on 127.0.0.1:$port"
+
+      # Always runs: `secrets` can't appear in an `if:`, and the step is a
+      # no-op when there is nothing to export.
+      - name: Export env
+        uses: grespi-tech/ci-workflows/.github/actions/export-env@v1.3.0
+        with:
+          env: ${{ inputs.env }}
+          secret-names: ${{ inputs.secret-names }}
+          secrets-json: ${{ toJSON(secrets) }}
+          secret-lines: ${{ secrets.ENV_SECRETS }}
+
+      - name: Install
+        if: inputs.install
+        run: pnpm install --frozen-lockfile
+
+      - name: Run
+        run: ${{ inputs.run }}
+
+      - name: Cleanup
+        if: always() && inputs.cleanup != ''
+        run: ${{ inputs.cleanup }}
+
+      - name: Stop Postgres
+        if: always() && inputs.postgres != ''
+        run: docker rm -f "$PGCONTAINER" >/dev/null 2>&1 || true
