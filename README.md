@@ -12,9 +12,11 @@ The pool's vCPUs run single-threaded code about 2x slower than GitHub-hosted
 runners. Tests with wall-clock budgets should multiply them by
 `PERF_BUDGET_SCALE` and set it to `2` in the caller's `env`.
 
-Callers pin an exact release tag (`@v1.1.0`). Tags are never moved: a fix is a
+Callers pin an exact release tag (`@v1.2.0`). Tags are never moved: a fix is a
 new tag, and callers bump to it. `v1` is superseded: `v1.0.1` made the pnpm
-install per-job, `v1.1.0` added `ENV_SECRETS`.
+install per-job, `v1.1.0` added `ENV_SECRETS`, `v1.2.0` made the Playwright container caps
+inputs (`container-cpus`, `container-memory`) and gave job containers low CPU
+priority.
 
 ## Secrets
 
@@ -38,7 +40,7 @@ Values are trimmed; an empty one is reported as a warning.
 ```yaml
 jobs:
   checks:
-    uses: grespi-tech/ci-workflows/.github/workflows/node.yml@v1.1.0
+    uses: grespi-tech/ci-workflows/.github/workflows/node.yml@v1.2.0
     secrets: inherit                # only needed with secret-names
     with:
       name: Check & test
@@ -62,7 +64,7 @@ Inputs: `run` (required), `name`, `cleanup` (runs even on failure), `env`
 ```yaml
 jobs:
   e2e:
-    uses: grespi-tech/ci-workflows/.github/workflows/playwright.yml@v1.1.0
+    uses: grespi-tech/ci-workflows/.github/workflows/playwright.yml@v1.2.0
     secrets: inherit
     with:
       image: mcr.microsoft.com/playwright:v1.57.0-noble   # must match @playwright/test
@@ -71,4 +73,5 @@ jobs:
 
 Inputs: `image` (required), `name`, `shards` (JSON list), `build`, `test`
 (`--shard=i/n` appended), `env`, `secret-names`, `node-version`,
+`container-cpus` (2), `container-memory` (3g),
 `pnpm-version`, `report-path`, `runs-on`, `timeout-minutes`.

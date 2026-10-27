@@ -5,7 +5,7 @@ name: playwright
 #
 #   jobs:
 #     e2e:
-#       uses: grespi-tech/ci-workflows/.github/workflows/playwright.yml@v1.0.1
+#       uses: grespi-tech/ci-workflows/.github/workflows/playwright.yml@v1.2.0
 #       secrets: inherit
 #       with:
 #         image: mcr.microsoft.com/playwright:v1.57.0-noble   # tag MUST match @playwright/test
@@ -56,6 +56,16 @@ on:
       timeout-minutes:
         type: number
         default: 45
+      container-cpus:
+        description: CPU cap for the test container (docker --cpus).
+        type: string
+        default: '2'
+      container-memory:
+        description: >
+          Memory cap for the test container (docker --memory). Size it to the
+          worker count: each Playwright worker runs its own browser.
+        type: string
+        default: 3g
     secrets:
       ENV_SECRETS:
         description: KEY=VALUE lines built from the caller's secrets; see node.yml.
@@ -72,11 +82,14 @@ jobs:
     # runners), so the bind-mounted workspace stays writable. Firefox refuses to
     # start as root with a $HOME it does not own.
     # --cpus/--memory: job containers run under dockerd, outside the runners'
-    # systemd slice, so the cap has to be set here. --ipc=host is Playwright's
-    # recommendation for Chromium.
+    # systemd slice, so the cap has to be set here. --cpu-shares 256 (default
+    # 1024) gives the host's other services priority when CPUs are contended.
+    # --ipc=host is Playwright's recommendation for Chromium.
     container:
       image: ${{ inputs.image }}
-      options: --user 1001 --cpus 2 --memory 3g --ipc=host --init
+      options: >-
+        --user 1001 --cpus ${{ inputs.container-cpus }} --memory ${{ inputs.container-memory }}
+        --cpu-shares 256 --ipc=host --init
     strategy:
       fail-fast: false
       matrix:
@@ -97,7 +110,7 @@ jobs:
 
       # Always runs; see node.yml.
       - name: Export env
-        uses: grespi-tech/ci-workflows/.github/actions/export-env@v1.1.0
+        uses: grespi-tech/ci-workflows/.github/actions/export-env@v1.2.0
         with:
           env: ${{ inputs.env }}
           secret-names: ${{ inputs.secret-names }}

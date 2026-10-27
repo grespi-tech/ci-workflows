@@ -5,7 +5,7 @@ name: node
 #
 #   jobs:
 #     checks:
-#       uses: grespi-tech/ci-workflows/.github/workflows/node.yml@v1.0.1
+#       uses: grespi-tech/ci-workflows/.github/workflows/node.yml@v1.2.0
 #       secrets: inherit            # only if secret-names is used
 #       with:
 #         run: |
@@ -107,9 +107,9 @@ jobs:
         run: |
           name="ci-pg-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RUNNER_NAME}"
           # Port 0 = a free port picked by Docker, so concurrent jobs on one
-          # box never collide. Capped because Docker containers run outside the
-          # runners' systemd slice.
-          docker run -d --rm --name "$name" --cpus 1 --memory 1g \
+          # box never collide. Capped, at low CPU priority, because Docker
+          # containers run outside the runners' systemd slice.
+          docker run -d --rm --name "$name" --cpus 1 --memory 1g --cpu-shares 256 \
             -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
             --tmpfs /var/lib/postgresql/data \
             -p 127.0.0.1:0:5432 "$IMAGE" >/dev/null
@@ -134,7 +134,7 @@ jobs:
       # Always runs: `secrets` can't appear in an `if:`, and the step is a
       # no-op when there is nothing to export.
       - name: Export env
-        uses: grespi-tech/ci-workflows/.github/actions/export-env@v1.1.0
+        uses: grespi-tech/ci-workflows/.github/actions/export-env@v1.2.0
         with:
           env: ${{ inputs.env }}
           secret-names: ${{ inputs.secret-names }}
