@@ -12,11 +12,17 @@ The pool's vCPUs run single-threaded code about 2x slower than GitHub-hosted
 runners. Tests with wall-clock budgets should multiply them by
 `PERF_BUDGET_SCALE` and set it to `2` in the caller's `env`.
 
-Callers pin an exact release tag (`@v1.2.0`). Tags are never moved: a fix is a
-new tag, and callers bump to it. `v1` is superseded: `v1.0.1` made the pnpm
-install per-job, `v1.1.0` added `ENV_SECRETS`, `v1.2.0` made the Playwright container caps
-inputs (`container-cpus`, `container-memory`) and gave job containers low CPU
-priority.
+Callers pin an exact release tag (`@v1.3.0`). Tags are never moved: a fix is a
+new tag, and callers bump to it. History:
+
+- `v1.0.1`: pnpm installed per job, so concurrent jobs can't delete each
+  other's pnpm binary.
+- `v1.1.0`: `ENV_SECRETS`.
+- `v1.2.0`: `container-cpus` / `container-memory` inputs; job containers get
+  low CPU priority.
+- `v1.3.0`: every exported secret is masked. **Don't use `v1.1.0`–`v1.2.0`**:
+  they printed `ENV_SECRETS` values in clear in job logs. Adds
+  `container-options`.
 
 ## Secrets
 
@@ -40,7 +46,7 @@ Values are trimmed; an empty one is reported as a warning.
 ```yaml
 jobs:
   checks:
-    uses: grespi-tech/ci-workflows/.github/workflows/node.yml@v1.2.0
+    uses: grespi-tech/ci-workflows/.github/workflows/node.yml@v1.3.0
     secrets: inherit                # only needed with secret-names
     with:
       name: Check & test
@@ -64,7 +70,7 @@ Inputs: `run` (required), `name`, `cleanup` (runs even on failure), `env`
 ```yaml
 jobs:
   e2e:
-    uses: grespi-tech/ci-workflows/.github/workflows/playwright.yml@v1.2.0
+    uses: grespi-tech/ci-workflows/.github/workflows/playwright.yml@v1.3.0
     secrets: inherit
     with:
       image: mcr.microsoft.com/playwright:v1.57.0-noble   # must match @playwright/test
@@ -73,5 +79,5 @@ jobs:
 
 Inputs: `image` (required), `name`, `shards` (JSON list), `build`, `test`
 (`--shard=i/n` appended), `env`, `secret-names`, `node-version`,
-`container-cpus` (2), `container-memory` (3g),
+`container-cpus` (2), `container-memory` (3g), `container-options`,
 `pnpm-version`, `report-path`, `runs-on`, `timeout-minutes`.

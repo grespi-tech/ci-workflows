@@ -5,7 +5,7 @@ name: playwright
 #
 #   jobs:
 #     e2e:
-#       uses: grespi-tech/ci-workflows/.github/workflows/playwright.yml@v1.2.0
+#       uses: grespi-tech/ci-workflows/.github/workflows/playwright.yml@v1.3.0
 #       secrets: inherit
 #       with:
 #         image: mcr.microsoft.com/playwright:v1.57.0-noble   # tag MUST match @playwright/test
@@ -66,6 +66,13 @@ on:
           worker count: each Playwright worker runs its own browser.
         type: string
         default: 3g
+      container-options:
+        description: >
+          Extra docker options for the test container, e.g. a -v mount so a
+          host path the workspace links to (a shared pnpm store) resolves
+          inside the container too.
+        type: string
+        default: ''
     secrets:
       ENV_SECRETS:
         description: KEY=VALUE lines built from the caller's secrets; see node.yml.
@@ -89,7 +96,7 @@ jobs:
       image: ${{ inputs.image }}
       options: >-
         --user 1001 --cpus ${{ inputs.container-cpus }} --memory ${{ inputs.container-memory }}
-        --cpu-shares 256 --ipc=host --init
+        --cpu-shares 256 --ipc=host --init ${{ inputs.container-options }}
     strategy:
       fail-fast: false
       matrix:
@@ -110,7 +117,7 @@ jobs:
 
       # Always runs; see node.yml.
       - name: Export env
-        uses: grespi-tech/ci-workflows/.github/actions/export-env@v1.2.0
+        uses: grespi-tech/ci-workflows/.github/actions/export-env@v1.3.0
         with:
           env: ${{ inputs.env }}
           secret-names: ${{ inputs.secret-names }}

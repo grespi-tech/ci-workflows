@@ -16,6 +16,15 @@ function write(key, value) {
 	appendFileSync(out, `${key}<<${eof}\n${value}\n${eof}\n`);
 }
 
+// GitHub masks only the exact strings it knows are secrets. A value cut out of
+// ENV_SECRETS, or a trimmed secret, is a new string, so it would be printed in
+// clear in every later step's env listing. Register each one before export.
+// (v1.1.0-v1.2.0 lacked this and leaked ENV_SECRETS values into job logs.)
+function writeSecret(key, value) {
+	for (const line of value.split('\n')) if (line.trim()) console.log(`::add-mask::${line}`);
+	write(key, value);
+}
+
 const expand = (value) =>
 	value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, name) => process.env[name] ?? '');
 
@@ -37,7 +46,7 @@ for (const name of (process.env.EXPORT_SECRET_NAMES || '').split(/\s+/).filter(B
 		missing.push(name);
 		continue;
 	}
-	write(name, value.trim().includes('\n') ? value : value.trim());
+	writeSecret(name, value.trim().includes('\n') ? value : value.trim());
 }
 
 // ENV_SECRETS: KEY=VALUE lines built by the caller from its own secrets. This
@@ -55,7 +64,7 @@ for (const raw of (process.env.EXPORT_SECRET_LINES || '').split('\n')) {
 		missing.push(key);
 		continue;
 	}
-	write(key, value);
+	writeSecret(key, value);
 }
 // Warn rather than fail: a suite may legitimately skip what a missing secret
 // would enable, and its own guards decide whether that is fatal.
