@@ -17,6 +17,9 @@ inputs:
   secrets-json:
     description: toJSON(secrets) from the calling workflow.
     default: '{}'
+  secret-lines:
+    description: KEY=VALUE lines of secrets (the ENV_SECRETS workflow secret).
+    default: ''
 
 runs:
   using: composite
@@ -26,4 +29,5 @@ runs:
         EXPORT_ENV_LINES: ${{ inputs.env }}
         EXPORT_SECRET_NAMES: ${{ inputs.secret-names }}
         EXPORT_SECRETS_JSON: ${{ inputs.secrets-json }}
+        EXPORT_SECRET_LINES: ${{ inputs.secret-lines }}
       run: node "$GITHUB_ACTION_PATH/export-env.mjs"

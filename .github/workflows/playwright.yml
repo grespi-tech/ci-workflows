@@ -56,6 +56,10 @@ on:
       timeout-minutes:
         type: number
         default: 45
+    secrets:
+      ENV_SECRETS:
+        description: KEY=VALUE lines built from the caller's secrets; see node.yml.
+        required: false
 
 jobs:
   e2e:
@@ -91,13 +95,14 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
 
+      # Always runs; see node.yml.
       - name: Export env
-        if: inputs.env != '' || inputs.secret-names != ''
-        uses: grespi-tech/ci-workflows/.github/actions/export-env@v1.0.1
+        uses: grespi-tech/ci-workflows/.github/actions/export-env@v1.1.0
         with:
           env: ${{ inputs.env }}
           secret-names: ${{ inputs.secret-names }}
           secrets-json: ${{ toJSON(secrets) }}
+          secret-lines: ${{ secrets.ENV_SECRETS }}
 
       - name: Install
         run: pnpm install --frozen-lockfile

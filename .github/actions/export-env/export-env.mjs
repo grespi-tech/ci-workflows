@@ -39,6 +39,24 @@ for (const name of (process.env.EXPORT_SECRET_NAMES || '').split(/\s+/).filter(B
 	}
 	write(name, value.trim().includes('\n') ? value : value.trim());
 }
+
+// ENV_SECRETS: KEY=VALUE lines built by the caller from its own secrets. This
+// is the only way to hand secrets to a workflow in another owner: `secrets:
+// inherit` passes nothing across owners. Values are trimmed and never
+// ${VAR}-expanded; an empty value counts as missing.
+for (const raw of (process.env.EXPORT_SECRET_LINES || '').split('\n')) {
+	const line = raw.trim();
+	if (!line || line.startsWith('#')) continue;
+	const eq = line.indexOf('=');
+	if (eq < 1) throw new Error('ENV_SECRETS line is not KEY=VALUE');
+	const key = line.slice(0, eq);
+	const value = line.slice(eq + 1).trim();
+	if (!value) {
+		missing.push(key);
+		continue;
+	}
+	write(key, value);
+}
 // Warn rather than fail: a suite may legitimately skip what a missing secret
 // would enable, and its own guards decide whether that is fatal.
 if (missing.length) console.log(`::warning::secrets not set in this repo: ${missing.join(', ')}`);

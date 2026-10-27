@@ -12,17 +12,33 @@ The pool's vCPUs run single-threaded code about 2x slower than GitHub-hosted
 runners. Tests with wall-clock budgets should multiply them by
 `PERF_BUDGET_SCALE` and set it to `2` in the caller's `env`.
 
-Callers pin an exact release tag (`@v1.0.1`). Tags are never moved: a fix is a
-new tag, and callers bump to it. `v1` is superseded by `v1.0.1`, whose pnpm
-install is per-job so concurrent jobs on the pool can't delete each other's
-pnpm binary.
+Callers pin an exact release tag (`@v1.1.0`). Tags are never moved: a fix is a
+new tag, and callers bump to it. `v1` is superseded: `v1.0.1` made the pnpm
+install per-job, `v1.1.0` added `ENV_SECRETS`.
+
+## Secrets
+
+Same owner as this repo (grespi-tech): `secrets: inherit` plus
+`secret-names: A B C`.
+
+Any other owner (e.g. a personal-account repo): `secrets: inherit` passes
+nothing across owners, so pass them explicitly as `KEY=VALUE` lines:
+
+```yaml
+    secrets:
+      ENV_SECRETS: |
+        AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+```
+
+Values are trimmed; an empty one is reported as a warning.
 
 ## node.yml: one pnpm job
 
 ```yaml
 jobs:
   checks:
-    uses: grespi-tech/ci-workflows/.github/workflows/node.yml@v1.0.1
+    uses: grespi-tech/ci-workflows/.github/workflows/node.yml@v1.1.0
     secrets: inherit                # only needed with secret-names
     with:
       name: Check & test
@@ -46,7 +62,7 @@ Inputs: `run` (required), `name`, `cleanup` (runs even on failure), `env`
 ```yaml
 jobs:
   e2e:
-    uses: grespi-tech/ci-workflows/.github/workflows/playwright.yml@v1.0.1
+    uses: grespi-tech/ci-workflows/.github/workflows/playwright.yml@v1.1.0
     secrets: inherit
     with:
       image: mcr.microsoft.com/playwright:v1.57.0-noble   # must match @playwright/test

@@ -64,6 +64,13 @@ on:
       timeout-minutes:
         type: number
         default: 30
+    secrets:
+      ENV_SECRETS:
+        description: >
+          KEY=VALUE lines built from the caller's secrets. Use this instead of
+          `secrets: inherit` + secret-names when the caller lives under another
+          owner: inherit passes nothing across owners.
+        required: false
 
 jobs:
   run:
@@ -124,13 +131,15 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "Postgres $IMAGE on 127.0.0.1:$port"
 
+      # Always runs: `secrets` can't appear in an `if:`, and the step is a
+      # no-op when there is nothing to export.
       - name: Export env
-        if: inputs.env != '' || inputs.secret-names != ''
-        uses: grespi-tech/ci-workflows/.github/actions/export-env@v1.0.1
+        uses: grespi-tech/ci-workflows/.github/actions/export-env@v1.1.0
         with:
           env: ${{ inputs.env }}
           secret-names: ${{ inputs.secret-names }}
           secrets-json: ${{ toJSON(secrets) }}
+          secret-lines: ${{ secrets.ENV_SECRETS }}
 
       - name: Install
         if: inputs.install
